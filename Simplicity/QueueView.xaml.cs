@@ -12,24 +12,31 @@ namespace Simplicity
             InitializeComponent();
             this.manager = manager;
 
-            QueueList.ItemsSource = manager.Queue;
-            PlaybackList.ItemsSource = manager.PlaybackList;
+            PlaybackTimeline.ItemsSource = manager.FullPlaybackList;
+            PlaybackTimeline.LayoutUpdated += (_, __) => HighlightCurrent();
 
-            PlaybackList.LayoutUpdated += (_, __) => HighlightCurrentSong();
-
-            manager.PropertyChanged += (_, __) => HighlightCurrentSong();
+            manager.PropertyChanged += (_, __) => HighlightCurrent();
         }
 
-        private void HighlightCurrentSong()
+        private void HighlightCurrent()
         {
-            foreach (Song song in PlaybackList.Items)
+            for (int i = 0; i < PlaybackTimeline.Items.Count; i++)
             {
-                var item = (ListBoxItem?)PlaybackList.ItemContainerGenerator.ContainerFromItem(song);
+                var item = (ListBoxItem?)PlaybackTimeline.ItemContainerGenerator.ContainerFromIndex(i);
                 if (item != null)
                 {
-                    item.Background = (song == manager.CurrentSong)
-                        ? new SolidColorBrush(Color.FromRgb(200, 255, 200))
-                        : Brushes.Transparent;
+                    if (i == manager.CurrentIndex)
+                    {
+                        item.Background = new SolidColorBrush(Color.FromRgb(200, 255, 200)); // Green highlight
+                    }
+                    else if (i >= manager.QueueStartIndex && i < manager.QueueEndIndexExclusive)
+                    {
+                        item.Background = new SolidColorBrush(Color.FromRgb(230, 230, 255)); // Light blue for queue
+                    }
+                    else
+                    {
+                        item.Background = Brushes.Transparent;
+                    }
                 }
             }
         }

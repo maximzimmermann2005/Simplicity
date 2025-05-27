@@ -12,6 +12,8 @@ namespace Simplicity
         private QueueView queueView;
         private QueueManager queueManager;
 
+        private DateTime lastBackClickTime = DateTime.MinValue;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -24,9 +26,7 @@ namespace Simplicity
             MainRegionContent.Content = folderView;
             SideRegionContent.Content = queueView;
 
-            folderView.SongSelected += song => queueManager.Play(song);
             folderView.FolderScanned += songs => queueManager.SetPlaybackList(songs);
-
             queueManager.SongChanged += PlaySong;
         }
 
@@ -39,7 +39,7 @@ namespace Simplicity
             waveOut.Init(audioFile);
             waveOut.Play();
 
-            NowPlayingPanel.ShowMetadata(song); // Now handled globally
+            NowPlayingPanel.ShowMetadata(song);
         }
 
         private void DisposeAudio()
@@ -60,7 +60,14 @@ namespace Simplicity
 
         private void Play_Click(object sender, RoutedEventArgs e)
         {
-            queueManager.PlayCurrent();
+            if (waveOut != null && waveOut.PlaybackState == PlaybackState.Paused)
+            {
+                waveOut.Play(); // Resume
+            }
+            else
+            {
+                queueManager.PlayCurrent(); // Triggers full reload via SongChanged
+            }
         }
 
         private void Pause_Click(object sender, RoutedEventArgs e)
@@ -70,7 +77,21 @@ namespace Simplicity
 
         private void Back_Click(object sender, RoutedEventArgs e)
         {
-            queueManager.Back();
+            var now = DateTime.Now;
+            var timeSinceLastClick = now - lastBackClickTime;
+
+            lastBackClickTime = now;
+
+            if (timeSinceLastClick.TotalMilliseconds < 500)
+            {
+                // Double-click: go to previous song
+                queueManager.Back();
+            }
+            else if (audioFile != null)
+            {
+                // Single click: restart current song
+                audioFile.CurrentTime = TimeSpan.Zero;
+            }
         }
 
         private void Next_Click(object sender, RoutedEventArgs e)
