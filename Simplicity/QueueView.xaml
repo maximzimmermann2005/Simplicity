@@ -1,0 +1,37 @@
+﻿<UserControl
+    x:Class="Simplicity.QueueView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Width="Auto"
+    Height="Auto">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <!--  "Queue" header  -->
+            <RowDefinition Height="2*" />
+            <!--  Queue list  -->
+            <RowDefinition Height="Auto" />
+            <!--  "Up Next" header  -->
+            <RowDefinition Height="3*" />
+            <!--  Playback list  -->
+        </Grid.RowDefinitions>
+
+        <TextBlock
+            Grid.Row="0"
+            Margin="0,0,0,5"
+            Text="Queue" />
+        <ListBox
+            x:Name="QueueList"
+            Grid.Row="1"
+            DisplayMemberPath="Title" />
+
+        <TextBlock
+            Grid.Row="2"
+            Margin="0,10,0,5"
+            Text="Up Next" />
+        <ListBox
+            x:Name="PlaybackList"
+            Grid.Row="3"
+            DisplayMemberPath="Title" />
+    </Grid>
+</UserControl>
