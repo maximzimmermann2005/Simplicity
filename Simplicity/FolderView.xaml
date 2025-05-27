@@ -22,7 +22,13 @@
         <ListBox
             x:Name="LibraryList"
             Height="300"
-            DisplayMemberPath="Title"
-            SelectionChanged="LibraryList_SelectionChanged" />
+            DisplayMemberPath="Title">
+            <ListBox.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Click="AddToQueue_Click" Header="Add to Queue" />
+                    <MenuItem Click="PlayNext_Click" Header="Play Next" />
+                </ContextMenu>
+            </ListBox.ContextMenu>
+        </ListBox>
     </StackPanel>
 </UserControl>

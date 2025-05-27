@@ -55,18 +55,22 @@
             <Button
                 Width="50"
                 Margin="5"
+                Click="Back_Click"
                 Content="⏮" />
             <Button
                 Width="50"
                 Margin="5"
+                Click="Play_Click"
                 Content="▶️" />
             <Button
                 Width="50"
                 Margin="5"
+                Click="Pause_Click"
                 Content="⏸" />
             <Button
                 Width="50"
                 Margin="5"
+                Click="Next_Click"
                 Content="⏭" />
         </StackPanel>
     </Grid>

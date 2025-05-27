@@ -18,6 +18,7 @@ namespace Simplicity
 
             queueManager = new QueueManager();
             folderView = new FolderView();
+            folderView.SetQueueManager(queueManager);
             queueView = new QueueView(queueManager);
 
             MainRegionContent.Content = folderView;
@@ -55,6 +56,26 @@ namespace Simplicity
         {
             DisposeAudio();
             base.OnClosed(e);
+        }
+
+        private void Play_Click(object sender, RoutedEventArgs e)
+        {
+            queueManager.PlayCurrent();
+        }
+
+        private void Pause_Click(object sender, RoutedEventArgs e)
+        {
+            waveOut?.Pause();
+        }
+
+        private void Back_Click(object sender, RoutedEventArgs e)
+        {
+            queueManager.Back();
+        }
+
+        private void Next_Click(object sender, RoutedEventArgs e)
+        {
+            queueManager.Next();
         }
     }
 }

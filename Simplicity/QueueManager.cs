@@ -76,5 +76,15 @@ namespace Simplicity
                 Play(PlaybackList[currentPlaybackIndex]);
             }
         }
+        public void Enqueue(Song song)
+        {
+            Queue.Add(song);
+        }
+
+        public void EnqueueNext(Song song)
+        {
+            Queue.Insert(0, song);
+        }
+
     }
 }

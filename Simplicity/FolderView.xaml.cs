@@ -17,6 +17,13 @@ namespace Simplicity
 
         public List<Song> LoadedSongs { get; private set; } = new();
 
+        private QueueManager? queueManager;
+
+        public void SetQueueManager(QueueManager manager)
+        {
+            queueManager = manager;
+        }
+
         public FolderView()
         {
             InitializeComponent();
@@ -99,12 +106,17 @@ namespace Simplicity
             return song;
         }
 
-        private void LibraryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void AddToQueue_Click(object sender, RoutedEventArgs e)
         {
-            if (LibraryList.SelectedItem is Song song)
-            {
-                SongSelected?.Invoke(song);
-            }
+            if (LibraryList.SelectedItem is Song song && queueManager != null)
+                queueManager.Enqueue(song);
         }
+
+        private void PlayNext_Click(object sender, RoutedEventArgs e)
+        {
+            if (LibraryList.SelectedItem is Song song && queueManager != null)
+                queueManager.EnqueueNext(song);
+        }
+
     }
 }
