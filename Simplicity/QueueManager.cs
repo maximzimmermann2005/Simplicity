@@ -11,12 +11,6 @@ namespace Simplicity
         public ObservableCollection<Song> FullPlaybackList { get; } = new();
 
         private int currentIndex = -1;
-        private int queueStartIndex = -1;
-        private int queueEndIndexExclusive = -1;
-
-        public int QueueStartIndex => queueStartIndex;
-        public int QueueEndIndexExclusive => queueEndIndexExclusive;
-
         public int CurrentIndex
         {
             get => currentIndex;
@@ -31,9 +25,23 @@ namespace Simplicity
             }
         }
 
-        public Song? CurrentSong => (CurrentIndex >= 0 && CurrentIndex < FullPlaybackList.Count)
-            ? FullPlaybackList[CurrentIndex]
-            : null;
+        private int queuedCount = 0;
+        public int QueuedCount
+        {
+            get => queuedCount;
+            private set
+            {
+                if (queuedCount != value)
+                {
+                    queuedCount = value;
+                    OnPropertyChanged(nameof(QueuedCount));
+                }
+            }
+        }
+
+        public Song? CurrentSong =>
+            (CurrentIndex >= 0 && CurrentIndex < FullPlaybackList.Count)
+                ? FullPlaybackList[CurrentIndex] : null;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -44,38 +52,87 @@ namespace Simplicity
                 FullPlaybackList.Add(song);
 
             CurrentIndex = 0;
+            QueuedCount = 0;
             PlayCurrent();
         }
 
         public void EnqueueNext(Song song)
         {
+            if (!FullPlaybackList.Contains(song))
+                return;
+
+            FullPlaybackList.Remove(song);
             int insertAt = CurrentIndex + 1;
-
             FullPlaybackList.Insert(insertAt, song);
-
-            UpdateQueueBoundsAfterInsert(insertAt);
+            QueuedCount++;
         }
 
         public void Enqueue(Song song)
         {
-            int insertAt = (queueEndIndexExclusive > CurrentIndex)
-                ? queueEndIndexExclusive
-                : CurrentIndex + 1;
+            if (!FullPlaybackList.Contains(song))
+                return;
 
+            FullPlaybackList.Remove(song);
+            int insertAt = CurrentIndex + QueuedCount + 1;
+            insertAt = Math.Min(insertAt, FullPlaybackList.Count);
             FullPlaybackList.Insert(insertAt, song);
-
-            UpdateQueueBoundsAfterInsert(insertAt);
+            QueuedCount++;
         }
 
-        private void UpdateQueueBoundsAfterInsert(int insertedIndex)
+        public void PlayFrom(Song song)
         {
-            if (queueStartIndex == -1 || insertedIndex < queueStartIndex)
-                queueStartIndex = insertedIndex;
+            int newIndex = FullPlaybackList.IndexOf(song);
+            if (newIndex == -1)
+                return;
 
-            if (queueEndIndexExclusive == -1 || insertedIndex >= queueEndIndexExclusive)
-                queueEndIndexExclusive = insertedIndex + 1;
+            int relative = newIndex - CurrentIndex;
+
+            if (relative > 0 && relative <= QueuedCount)
+            {
+                QueuedCount -= relative;
+            }
             else
-                queueEndIndexExclusive++; // Push end forward if inserted inside queue
+            {
+                QueuedCount = 0;
+            }
+
+            CurrentIndex = newIndex;
+            PlayCurrent();
+        }
+
+        public void Remove(Song song)
+        {
+            int index = FullPlaybackList.IndexOf(song);
+            if (index == -1) return;
+
+            int relative = index - CurrentIndex;
+            FullPlaybackList.RemoveAt(index);
+
+            if (index < CurrentIndex)
+                CurrentIndex--;
+
+            if (relative > 0 && relative <= QueuedCount)
+                QueuedCount = Math.Max(QueuedCount - 1, 0);
+        }
+
+        public void MoveAndAdjustQueue(Song song, int newIndex)
+        {
+            int oldIndex = FullPlaybackList.IndexOf(song);
+            if (oldIndex == -1 || newIndex == -1 || oldIndex == newIndex)
+                return;
+
+            int oldRelative = oldIndex - CurrentIndex;
+            int newRelative = newIndex - CurrentIndex;
+
+            FullPlaybackList.Move(oldIndex, newIndex);
+
+            if (CurrentIndex == oldIndex)
+                CurrentIndex = newIndex;
+
+            if (oldRelative > 0 && oldRelative <= QueuedCount && (newRelative <= 0 || newRelative > QueuedCount))
+                QueuedCount = Math.Max(QueuedCount - 1, 0);
+            else if ((oldRelative <= 0 || oldRelative > QueuedCount) && newRelative > 0 && newRelative <= QueuedCount + 1)
+                QueuedCount++;
         }
 
         public void Next()
@@ -83,21 +140,8 @@ namespace Simplicity
             if (CurrentIndex + 1 < FullPlaybackList.Count)
             {
                 CurrentIndex++;
-
-                // If we just played through the queue, shift the bounds
-                if (queueStartIndex != -1 && CurrentIndex >= queueStartIndex)
-                {
-                    if (CurrentIndex >= queueEndIndexExclusive)
-                    {
-                        queueStartIndex = -1;
-                        queueEndIndexExclusive = -1;
-                    }
-                    else
-                    {
-                        queueStartIndex = CurrentIndex + 1;
-                    }
-                }
-
+                if (QueuedCount > 0)
+                    QueuedCount--;
                 PlayCurrent();
             }
         }
@@ -114,9 +158,7 @@ namespace Simplicity
         public void PlayCurrent()
         {
             if (CurrentSong != null)
-            {
                 SongChanged?.Invoke(CurrentSong);
-            }
         }
 
         protected void OnPropertyChanged(string name) =>

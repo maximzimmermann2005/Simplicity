@@ -15,12 +15,11 @@
             PreviewMouseMove="PlaybackTimeline_PreviewMouseMove"
             ScrollViewer.VerticalScrollBarVisibility="Auto"
             SelectionMode="Extended">
-
             <ListBox.ContextMenu>
                 <ContextMenu x:Name="PlaybackTimelineContextMenu">
                     <MenuItem Click="PlayFromHere_Click" Header="Play From Here" />
                     <MenuItem Click="PlayNext_Click" Header="Play Next" />
-                    <MenuItem Click="AddToQueue_Click" Header="Add to Queue" />
+                    <MenuItem Click="AddToQueue_Click" Header="Move to Queue" />
                     <MenuItem Click="RemoveFromPlaybackList_Click" Header="Remove from Playback List" />
                 </ContextMenu>
             </ListBox.ContextMenu>

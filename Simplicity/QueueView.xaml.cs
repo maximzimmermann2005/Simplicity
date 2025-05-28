@@ -19,7 +19,6 @@ namespace Simplicity
 
             PlaybackTimeline.ItemsSource = manager.FullPlaybackList;
             PlaybackTimeline.LayoutUpdated += (_, __) => HighlightCurrent();
-
             manager.PropertyChanged += (_, __) => HighlightCurrent();
         }
 
@@ -30,13 +29,15 @@ namespace Simplicity
                 var item = (ListBoxItem?)PlaybackTimeline.ItemContainerGenerator.ContainerFromIndex(i);
                 if (item != null)
                 {
-                    if (i == manager.CurrentIndex)
+                    int relative = i - manager.CurrentIndex;
+
+                    if (relative == 0)
                     {
-                        item.Background = new SolidColorBrush(Color.FromRgb(200, 255, 200));
+                        item.Background = new SolidColorBrush(Color.FromRgb(200, 255, 200)); // Green
                     }
-                    else if (i >= manager.QueueStartIndex && i < manager.QueueEndIndexExclusive)
+                    else if (relative > 0 && relative <= manager.QueuedCount)
                     {
-                        item.Background = new SolidColorBrush(Color.FromRgb(230, 230, 255));
+                        item.Background = new SolidColorBrush(Color.FromRgb(230, 230, 255)); // Purple
                     }
                     else
                     {
@@ -53,7 +54,18 @@ namespace Simplicity
             if (PlaybackTimelineContextMenu != null)
             {
                 var playFromHere = (MenuItem)PlaybackTimelineContextMenu.Items[0];
-                playFromHere.IsEnabled = selected.Count == 1;
+                var playNext = (MenuItem)PlaybackTimelineContextMenu.Items[1];
+                var moveToQueue = (MenuItem)PlaybackTimelineContextMenu.Items[2];
+
+                bool allInQueue = selected.All(song =>
+                {
+                    int relative = manager.FullPlaybackList.IndexOf(song) - manager.CurrentIndex;
+                    return relative > 0 && relative <= manager.QueuedCount;
+                });
+
+                playFromHere.Visibility = selected.Count == 1 ? Visibility.Visible : Visibility.Collapsed;
+                moveToQueue.Visibility = allInQueue ? Visibility.Collapsed : Visibility.Visible;
+                playNext.Visibility = Visibility.Visible;
             }
         }
 
@@ -62,32 +74,37 @@ namespace Simplicity
             if (PlaybackTimeline.SelectedItems.Count == 1 &&
                 PlaybackTimeline.SelectedItem is Song selected)
             {
-                int index = manager.FullPlaybackList.IndexOf(selected);
-                if (index != -1)
-                {
-                    manager.CurrentIndex = index;
-                    manager.PlayCurrent();
-                }
+                manager.PlayFrom(selected);
             }
         }
 
         private void PlayNext_Click(object sender, RoutedEventArgs e)
         {
-            foreach (Song song in PlaybackTimeline.SelectedItems)
+            var selected = PlaybackTimeline.SelectedItems.Cast<Song>().ToList();
+
+            foreach (var song in selected.Reverse<Song>())
+            {
                 manager.EnqueueNext(song);
+            }
         }
 
         private void AddToQueue_Click(object sender, RoutedEventArgs e)
         {
-            foreach (Song song in PlaybackTimeline.SelectedItems)
+            var selected = PlaybackTimeline.SelectedItems.Cast<Song>().ToList();
+
+            foreach (var song in selected)
+            {
                 manager.Enqueue(song);
+            }
         }
 
         private void RemoveFromPlaybackList_Click(object sender, RoutedEventArgs e)
         {
             var selected = PlaybackTimeline.SelectedItems.Cast<Song>().ToList();
             foreach (var song in selected)
-                manager.FullPlaybackList.Remove(song);
+            {
+                manager.Remove(song);
+            }
         }
 
         private void PlaybackTimeline_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -122,18 +139,20 @@ namespace Simplicity
         {
             if (e.Data.GetDataPresent(typeof(Song)))
             {
-                var droppedData = e.Data.GetData(typeof(Song)) as Song;
+                var dragged = e.Data.GetData(typeof(Song)) as Song;
                 var target = ((FrameworkElement)e.OriginalSource).DataContext as Song;
 
-                if (droppedData is Song dragged && target is Song dropTarget)
+                if (dragged != null && target != null && dragged != target)
                 {
-                    int oldIndex = manager.FullPlaybackList.IndexOf(dragged);
-                    int newIndex = manager.FullPlaybackList.IndexOf(dropTarget);
+                    var list = manager.FullPlaybackList;
+                    int oldIndex = list.IndexOf(dragged);
+                    int newIndex = list.IndexOf(target);
 
-                    if (oldIndex != newIndex && oldIndex != -1 && newIndex != -1)
-                    {
-                        manager.FullPlaybackList.Move(oldIndex, newIndex);
-                    }
+                    if (oldIndex == -1 || newIndex == -1 || oldIndex == newIndex)
+                        return;
+
+                    manager.MoveAndAdjustQueue(dragged, newIndex);
+                    HighlightCurrent();
                 }
             }
         }
