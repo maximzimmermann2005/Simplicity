@@ -20,9 +20,9 @@ namespace Simplicity
         public int CurrentIndex
         {
             get => currentIndex;
-            private set
+            set
             {
-                if (currentIndex != value)
+                if (value >= 0 && value < FullPlaybackList.Count && currentIndex != value)
                 {
                     currentIndex = value;
                     OnPropertyChanged(nameof(CurrentIndex));

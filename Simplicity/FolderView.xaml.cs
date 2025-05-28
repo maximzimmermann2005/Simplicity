@@ -12,7 +12,6 @@ namespace Simplicity
 {
     public partial class FolderView : UserControl
     {
-        public event Action<Song>? SongSelected;
         public event Action<List<Song>>? FolderScanned;
 
         public List<Song> LoadedSongs { get; private set; } = new();

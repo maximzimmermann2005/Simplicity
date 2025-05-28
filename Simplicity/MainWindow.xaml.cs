@@ -60,13 +60,17 @@ namespace Simplicity
 
         private void Play_Click(object sender, RoutedEventArgs e)
         {
-            if (waveOut != null && waveOut.PlaybackState == PlaybackState.Paused)
+            if (waveOut != null)
             {
-                waveOut.Play(); // Resume
+                if (waveOut.PlaybackState == PlaybackState.Paused)
+                {
+                    waveOut.Play(); // Resume
+                }
+                // Do nothing if already playing
             }
             else
             {
-                queueManager.PlayCurrent(); // Triggers full reload via SongChanged
+                queueManager.PlayCurrent(); // Only load new audio if nothing is active
             }
         }
 
