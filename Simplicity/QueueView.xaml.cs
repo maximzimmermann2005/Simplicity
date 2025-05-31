@@ -176,8 +176,8 @@ namespace Simplicity
                         }
                         else if (pos.Y < rect.Bottom)
                         {
-                            index = i;
-                            above = false;
+                            index = i + 1;
+                            above = true;
                             break;
                         }
                     }
@@ -185,11 +185,12 @@ namespace Simplicity
 
                 if (index == -1)
                 {
+                    // Dropping below the last item
                     index = PlaybackTimeline.Items.Count;
-                    above = false;
+                    above = true;
                 }
 
-                _insertionIndex = above ? index : index + 1;
+                _insertionIndex = index;
                 _insertionAbove = above;
 
                 ShowInsertionAdorner(index, above);
@@ -213,16 +214,22 @@ namespace Simplicity
                 var songs = draggedItems.Cast<Song>().ToList();
                 var list = manager.FullPlaybackList;
 
+                // Count how many dragged items are before the insertion index
+                int adjust = songs.Select(song => list.IndexOf(song))
+                                  .Where(idx => idx >= 0 && idx < _insertionIndex)
+                                  .Count();
+
                 // Remove all dragged items first
                 foreach (var song in songs)
                     list.Remove(song);
 
-                // Adjust insertion index if needed
-                int insertAt = _insertionIndex;
+                // Adjust insertion index
+                int insertAt = _insertionIndex - adjust;
+                if (insertAt < 0) insertAt = 0;
+                if (insertAt > list.Count) insertAt = list.Count;
+
                 foreach (var song in songs)
                 {
-                    if (insertAt > list.Count)
-                        insertAt = list.Count;
                     list.Insert(insertAt, song);
                     insertAt++;
                 }
@@ -258,7 +265,7 @@ namespace Simplicity
                     var adornerLayer = AdornerLayer.GetAdornerLayer(item);
                     if (adornerLayer != null)
                     {
-                        _insertionAdorner = new InsertionAdorner(item, above);
+                        _insertionAdorner = new InsertionAdorner(item, true);
                         adornerLayer.Add(_insertionAdorner);
                     }
                 }
