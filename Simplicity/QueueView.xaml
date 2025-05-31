@@ -9,11 +9,6 @@
             x:Name="PlaybackTimeline"
             AllowDrop="True"
             ContextMenuOpening="PlaybackTimeline_ContextMenuOpening"
-            DragLeave="PlaybackTimeline_DragLeave"
-            DragOver="PlaybackTimeline_DragOver"
-            Drop="PlaybackTimeline_Drop"
-            PreviewMouseLeftButtonDown="PlaybackTimeline_PreviewMouseLeftButtonDown"
-            PreviewMouseMove="PlaybackTimeline_PreviewMouseMove"
             ScrollViewer.VerticalScrollBarVisibility="Auto"
             SelectionMode="Extended">
             <ListBox.ContextMenu>
@@ -24,6 +19,30 @@
                     <MenuItem Click="RemoveFromPlaybackList_Click" Header="Remove from Playback List" />
                 </ContextMenu>
             </ListBox.ContextMenu>
+            <ListBox.ItemTemplate>
+                <DataTemplate DataType="{x:Type local:Song}">
+                    <Grid Height="Auto">
+                        <StackPanel x:Name="SongContent">
+                            <TextBlock FontWeight="SemiBold" Text="{Binding Title}" />
+                            <TextBlock Opacity="0.8" Text="{Binding Artist}" />
+                        </StackPanel>
+
+                        <Rectangle
+                            x:Name="IndicatorLine"
+                            Height="2"
+                            Margin="0,2"
+                            Fill="DeepSkyBlue"
+                            Visibility="Collapsed" />
+
+                    </Grid>
+                    <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding IsPlaceholder}" Value="True">
+                            <Setter TargetName="SongContent" Property="Visibility" Value="Collapsed" />
+                            <Setter TargetName="IndicatorLine" Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
         </ListBox>
     </Grid>
 </UserControl>
