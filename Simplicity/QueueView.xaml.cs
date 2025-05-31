@@ -6,6 +6,9 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Collections;
 using System.Windows.Documents;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Text;
 
 namespace Simplicity
 {
@@ -16,7 +19,8 @@ namespace Simplicity
 
         private InsertionAdorner? _insertionAdorner;
         private int _insertionIndex = -1;
-        private bool _insertionAbove;
+
+        private int _lastAdornerIndex = -1;
 
         public QueueView(QueueManager manager)
         {
@@ -26,6 +30,24 @@ namespace Simplicity
             PlaybackTimeline.ItemsSource = manager.FullPlaybackList;
             PlaybackTimeline.LayoutUpdated += (_, __) => HighlightCurrent();
             manager.PropertyChanged += (_, __) => HighlightCurrent();
+        }
+
+        private static T? FindVisualChild<T>(DependencyObject? parent) where T : DependencyObject
+        {
+            if (parent == null) return null;
+
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T typedChild)
+                {
+                    return typedChild;
+                }
+                var result = FindVisualChild<T>(child);
+                if (result != null)
+                    return result;
+            }
+            return null;
         }
 
         private void HighlightCurrent()
@@ -117,15 +139,13 @@ namespace Simplicity
         {
             _dragStartPoint = e.GetPosition(null);
 
-            // Find the item under the mouse
             var item = FindAncestor<ListBoxItem>((DependencyObject)e.OriginalSource);
             if (item != null)
             {
-                // If the item is already selected and we're not holding Ctrl/Shift, prevent selection change
                 if (PlaybackTimeline.SelectedItems.Contains(item.DataContext) &&
                     (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) == 0)
                 {
-                    e.Handled = true; // Prevent ListBox from changing selection
+                    e.Handled = true;
                 }
             }
         }
@@ -149,52 +169,78 @@ namespace Simplicity
 
         private void PlaybackTimeline_DragOver(object sender, DragEventArgs e)
         {
-            e.Effects = DragDropEffects.None;
-            _insertionIndex = -1;
-            _insertionAbove = false;
+            // --- Step 1: Determine the new insertion index using a single, unified method ---
+            int newInsertionIndex = -1;
+            Point pos = e.GetPosition(PlaybackTimeline);
 
-            if (e.Data.GetDataPresent(typeof(List<Song>)) || e.Data.GetDataPresent(typeof(IList)))
+            if (PlaybackTimeline.Items.Count == 0)
             {
-                Point pos = e.GetPosition(PlaybackTimeline);
-                int index = -1;
-                bool above = false;
-
+                newInsertionIndex = 0;
+            }
+            else
+            {
                 for (int i = 0; i < PlaybackTimeline.Items.Count; i++)
                 {
                     var item = (ListBoxItem)PlaybackTimeline.ItemContainerGenerator.ContainerFromIndex(i);
                     if (item != null)
                     {
-                        var bounds = VisualTreeHelper.GetDescendantBounds(item);
-                        var topLeft = item.TranslatePoint(new Point(0, 0), PlaybackTimeline);
-                        var rect = new Rect(topLeft, bounds.Size);
-
-                        if (pos.Y < rect.Top + rect.Height / 2)
+                        // The boundary is always the midpoint of the item.
+                        double itemMidPointY = item.TranslatePoint(new Point(0, item.ActualHeight / 2), PlaybackTimeline).Y;
+                        if (pos.Y < itemMidPointY)
                         {
-                            index = i;
-                            above = true;
-                            break;
-                        }
-                        else if (pos.Y < rect.Bottom)
-                        {
-                            index = i + 1;
-                            above = true;
+                            newInsertionIndex = i;
                             break;
                         }
                     }
                 }
 
-                if (index == -1)
+                if (newInsertionIndex == -1)
                 {
-                    // Dropping below the last item
-                    index = PlaybackTimeline.Items.Count;
-                    above = true;
+                    // If the loop finished, we are below the midpoint of the last item.
+                    newInsertionIndex = PlaybackTimeline.Items.Count;
                 }
+            }
 
-                _insertionIndex = index;
-                _insertionAbove = above;
+            // --- Step 2: Compare NEW index with LAST index and update visuals ---
+            if (newInsertionIndex != _lastAdornerIndex)
+            {
+                RemoveInsertionAdorner();
 
-                ShowInsertionAdorner(index, above);
-                e.Effects = DragDropEffects.Move;
+                if (newInsertionIndex != -1)
+                {
+                    ListBoxItem? itemToAdorn = null;
+                    bool adornAbove = true;
+
+                    if (newInsertionIndex < PlaybackTimeline.Items.Count)
+                    {
+                        itemToAdorn = (ListBoxItem)PlaybackTimeline.ItemContainerGenerator.ContainerFromIndex(newInsertionIndex);
+                        adornAbove = true;
+                    }
+                    else if (PlaybackTimeline.Items.Count > 0)
+                    {
+                        itemToAdorn = (ListBoxItem)PlaybackTimeline.ItemContainerGenerator.ContainerFromIndex(PlaybackTimeline.Items.Count - 1);
+                        adornAbove = false;
+                    }
+
+                    if (itemToAdorn != null)
+                    {
+                        ShowInsertionAdorner(itemToAdorn, adornAbove);
+                    }
+                }
+                _lastAdornerIndex = newInsertionIndex;
+            }
+
+            // --- Step 3: Handle Drop Effect & Scrolling ---
+            _insertionIndex = newInsertionIndex;
+            e.Effects = (_insertionIndex != -1) ? DragDropEffects.Move : DragDropEffects.None;
+
+            var scrollViewer = FindVisualChild<ScrollViewer>(PlaybackTimeline);
+            if (scrollViewer != null)
+            {
+                double tolerance = 25.0;
+                double verticalPos = e.GetPosition(scrollViewer).Y;
+                if (verticalPos < tolerance) scrollViewer.ScrollToVerticalOffset(scrollViewer.VerticalOffset - 5);
+                else if (verticalPos > scrollViewer.ActualHeight - tolerance) scrollViewer.ScrollToVerticalOffset(scrollViewer.VerticalOffset + 5);
             }
             e.Handled = true;
         }
@@ -214,16 +260,13 @@ namespace Simplicity
                 var songs = draggedItems.Cast<Song>().ToList();
                 var list = manager.FullPlaybackList;
 
-                // Count how many dragged items are before the insertion index
                 int adjust = songs.Select(song => list.IndexOf(song))
                                   .Where(idx => idx >= 0 && idx < _insertionIndex)
                                   .Count();
 
-                // Remove all dragged items first
                 foreach (var song in songs)
                     list.Remove(song);
 
-                // Adjust insertion index
                 int insertAt = _insertionIndex - adjust;
                 if (insertAt < 0) insertAt = 0;
                 if (insertAt > list.Count) insertAt = list.Count;
@@ -251,38 +294,16 @@ namespace Simplicity
         private void PlaybackTimeline_DragLeave(object sender, DragEventArgs e)
         {
             RemoveInsertionAdorner();
+            _lastAdornerIndex = -1;
         }
 
-        private void ShowInsertionAdorner(int itemIndex, bool above)
+        private void ShowInsertionAdorner(UIElement item, bool isAbove)
         {
-            RemoveInsertionAdorner();
-
-            if (itemIndex < PlaybackTimeline.Items.Count)
+            var adornerLayer = AdornerLayer.GetAdornerLayer(item);
+            if (adornerLayer != null)
             {
-                var item = (ListBoxItem)PlaybackTimeline.ItemContainerGenerator.ContainerFromIndex(itemIndex);
-                if (item != null)
-                {
-                    var adornerLayer = AdornerLayer.GetAdornerLayer(item);
-                    if (adornerLayer != null)
-                    {
-                        _insertionAdorner = new InsertionAdorner(item, true);
-                        adornerLayer.Add(_insertionAdorner);
-                    }
-                }
-            }
-            else if (PlaybackTimeline.Items.Count > 0)
-            {
-                // Add adorner to the last item for end-of-list drop
-                var item = (ListBoxItem)PlaybackTimeline.ItemContainerGenerator.ContainerFromIndex(PlaybackTimeline.Items.Count - 1);
-                if (item != null)
-                {
-                    var adornerLayer = AdornerLayer.GetAdornerLayer(item);
-                    if (adornerLayer != null)
-                    {
-                        _insertionAdorner = new InsertionAdorner(item, false);
-                        adornerLayer.Add(_insertionAdorner);
-                    }
-                }
+                _insertionAdorner = new InsertionAdorner(item, isAbove);
+                adornerLayer.Add(_insertionAdorner);
             }
         }
 
