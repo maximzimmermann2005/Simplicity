@@ -4,6 +4,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Collections;
+using System.Windows.Documents;
 
 namespace Simplicity
 {
@@ -11,6 +13,10 @@ namespace Simplicity
     {
         private readonly QueueManager manager;
         private Point _dragStartPoint;
+
+        private InsertionAdorner? _insertionAdorner;
+        private int _insertionIndex = -1;
+        private bool _insertionAbove;
 
         public QueueView(QueueManager manager)
         {
@@ -110,6 +116,18 @@ namespace Simplicity
         private void PlaybackTimeline_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             _dragStartPoint = e.GetPosition(null);
+
+            // Find the item under the mouse
+            var item = FindAncestor<ListBoxItem>((DependencyObject)e.OriginalSource);
+            if (item != null)
+            {
+                // If the item is already selected and we're not holding Ctrl/Shift, prevent selection change
+                if (PlaybackTimeline.SelectedItems.Contains(item.DataContext) &&
+                    (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) == 0)
+                {
+                    e.Handled = true; // Prevent ListBox from changing selection
+                }
+            }
         }
 
         private void PlaybackTimeline_PreviewMouseMove(object sender, MouseEventArgs e)
@@ -120,10 +138,10 @@ namespace Simplicity
                 if (Math.Abs(position.X - _dragStartPoint.X) > SystemParameters.MinimumHorizontalDragDistance ||
                     Math.Abs(position.Y - _dragStartPoint.Y) > SystemParameters.MinimumVerticalDragDistance)
                 {
-                    var listBoxItem = FindAncestor<ListBoxItem>((DependencyObject)e.OriginalSource);
-                    if (listBoxItem != null)
+                    if (PlaybackTimeline.SelectedItems.Count > 0)
                     {
-                        DragDrop.DoDragDrop(listBoxItem, listBoxItem.DataContext, DragDropEffects.Move);
+                        var items = PlaybackTimeline.SelectedItems.Cast<Song>().ToList();
+                        DragDrop.DoDragDrop(PlaybackTimeline, items, DragDropEffects.Move);
                     }
                 }
             }
@@ -131,29 +149,84 @@ namespace Simplicity
 
         private void PlaybackTimeline_DragOver(object sender, DragEventArgs e)
         {
-            e.Effects = DragDropEffects.Move;
+            e.Effects = DragDropEffects.None;
+            _insertionIndex = -1;
+            _insertionAbove = false;
+
+            if (e.Data.GetDataPresent(typeof(List<Song>)) || e.Data.GetDataPresent(typeof(IList)))
+            {
+                Point pos = e.GetPosition(PlaybackTimeline);
+                int index = -1;
+                bool above = false;
+
+                for (int i = 0; i < PlaybackTimeline.Items.Count; i++)
+                {
+                    var item = (ListBoxItem)PlaybackTimeline.ItemContainerGenerator.ContainerFromIndex(i);
+                    if (item != null)
+                    {
+                        var bounds = VisualTreeHelper.GetDescendantBounds(item);
+                        var topLeft = item.TranslatePoint(new Point(0, 0), PlaybackTimeline);
+                        var rect = new Rect(topLeft, bounds.Size);
+
+                        if (pos.Y < rect.Top + rect.Height / 2)
+                        {
+                            index = i;
+                            above = true;
+                            break;
+                        }
+                        else if (pos.Y < rect.Bottom)
+                        {
+                            index = i;
+                            above = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (index == -1)
+                {
+                    index = PlaybackTimeline.Items.Count;
+                    above = false;
+                }
+
+                _insertionIndex = above ? index : index + 1;
+                _insertionAbove = above;
+
+                ShowInsertionAdorner(index, above);
+                e.Effects = DragDropEffects.Move;
+            }
             e.Handled = true;
         }
 
         private void PlaybackTimeline_Drop(object sender, DragEventArgs e)
         {
-            if (e.Data.GetDataPresent(typeof(Song)))
+            RemoveInsertionAdorner();
+
+            IList? draggedItems = null;
+            if (e.Data.GetDataPresent(typeof(List<Song>)))
+                draggedItems = e.Data.GetData(typeof(List<Song>)) as IList;
+            else if (e.Data.GetDataPresent(typeof(IList)))
+                draggedItems = e.Data.GetData(typeof(IList)) as IList;
+
+            if (draggedItems != null && _insertionIndex >= 0)
             {
-                var dragged = e.Data.GetData(typeof(Song)) as Song;
-                var target = ((FrameworkElement)e.OriginalSource).DataContext as Song;
+                var songs = draggedItems.Cast<Song>().ToList();
+                var list = manager.FullPlaybackList;
 
-                if (dragged != null && target != null && dragged != target)
+                // Remove all dragged items first
+                foreach (var song in songs)
+                    list.Remove(song);
+
+                // Adjust insertion index if needed
+                int insertAt = _insertionIndex;
+                foreach (var song in songs)
                 {
-                    var list = manager.FullPlaybackList;
-                    int oldIndex = list.IndexOf(dragged);
-                    int newIndex = list.IndexOf(target);
-
-                    if (oldIndex == -1 || newIndex == -1 || oldIndex == newIndex)
-                        return;
-
-                    manager.MoveAndAdjustQueue(dragged, newIndex);
-                    HighlightCurrent();
+                    if (insertAt > list.Count)
+                        insertAt = list.Count;
+                    list.Insert(insertAt, song);
+                    insertAt++;
                 }
+                HighlightCurrent();
             }
         }
 
@@ -166,6 +239,55 @@ namespace Simplicity
                 current = VisualTreeHelper.GetParent(current);
             }
             return null;
+        }
+
+        private void PlaybackTimeline_DragLeave(object sender, DragEventArgs e)
+        {
+            RemoveInsertionAdorner();
+        }
+
+        private void ShowInsertionAdorner(int itemIndex, bool above)
+        {
+            RemoveInsertionAdorner();
+
+            if (itemIndex < PlaybackTimeline.Items.Count)
+            {
+                var item = (ListBoxItem)PlaybackTimeline.ItemContainerGenerator.ContainerFromIndex(itemIndex);
+                if (item != null)
+                {
+                    var adornerLayer = AdornerLayer.GetAdornerLayer(item);
+                    if (adornerLayer != null)
+                    {
+                        _insertionAdorner = new InsertionAdorner(item, above);
+                        adornerLayer.Add(_insertionAdorner);
+                    }
+                }
+            }
+            else if (PlaybackTimeline.Items.Count > 0)
+            {
+                // Add adorner to the last item for end-of-list drop
+                var item = (ListBoxItem)PlaybackTimeline.ItemContainerGenerator.ContainerFromIndex(PlaybackTimeline.Items.Count - 1);
+                if (item != null)
+                {
+                    var adornerLayer = AdornerLayer.GetAdornerLayer(item);
+                    if (adornerLayer != null)
+                    {
+                        _insertionAdorner = new InsertionAdorner(item, false);
+                        adornerLayer.Add(_insertionAdorner);
+                    }
+                }
+            }
+        }
+
+        private void RemoveInsertionAdorner()
+        {
+            if (_insertionAdorner != null)
+            {
+                var adornerLayer = AdornerLayer.GetAdornerLayer(_insertionAdorner.AdornedElement);
+                if (adornerLayer != null)
+                    adornerLayer.Remove(_insertionAdorner);
+                _insertionAdorner = null;
+            }
         }
     }
 }

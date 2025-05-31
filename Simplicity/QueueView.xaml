@@ -9,6 +9,7 @@
             x:Name="PlaybackTimeline"
             AllowDrop="True"
             ContextMenuOpening="PlaybackTimeline_ContextMenuOpening"
+            DragLeave="PlaybackTimeline_DragLeave"
             DragOver="PlaybackTimeline_DragOver"
             Drop="PlaybackTimeline_Drop"
             PreviewMouseLeftButtonDown="PlaybackTimeline_PreviewMouseLeftButtonDown"
